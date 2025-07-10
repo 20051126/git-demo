@@ -1,0 +1,100 @@
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+
+# 定义一个简单的光伏故障检测模型
+class PVFaultDetectionModel(nn.Module):
+    def __init__(self, input_size=10, hidden_size=50, num_classes=2):
+        super(PVFaultDetectionModel, self).__init__()
+        self.layer1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.layer2 = nn.Linear(hidden_size, num_classes)
+    
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.relu(x)
+        x = self.layer2(x)
+        return x
+
+# 生成模拟数据 (实际应用中应替换为真实数据)
+def generate_sample_data(num_samples=1000, input_size=10, num_classes=2):
+    # 生成随机输入特征
+    X = torch.randn(num_samples, input_size)
+    
+    # 生成标签 (简单线性规则生成示例标签)
+    # 这里假设当某些特征的组合超过阈值时有故障
+    y = (torch.sum(X[:, :5], dim=1) > 1.0).long()
+    
+    # 创建数据集和数据加载器
+    dataset = TensorDataset(X, y)
+    train_size = int(0.8 * num_samples)
+    test_size = num_samples - train_size
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
+    
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    
+    return train_loader, test_loader
+
+# 训练模型
+def train_model(model, train_loader, test_loader, num_epochs=10, learning_rate=0.001):
+    # 定义损失函数和优化器
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # 训练循环
+    for epoch in range(num_epochs):
+        model.train()  # 设置为训练模式
+        running_loss = 0.0
+        
+        for inputs, labels in train_loader:
+            # 清零梯度
+            optimizer.zero_grad()
+            
+            # 前向传播
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            
+            # 反向传播和优化
+            loss.backward()
+            optimizer.step()
+            
+            running_loss += loss.item()
+        
+        # 计算平均损失
+        avg_loss = running_loss / len(train_loader)
+        
+        # 在测试集上评估
+        model.eval()  # 设置为评估模式
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for inputs, labels in test_loader:
+                outputs = model(inputs)
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        
+        accuracy = 100 * correct / total
+        
+        print(f'Epoch {epoch+1}/{num_epochs}, Loss: {avg_loss:.4f}, Test Accuracy: {accuracy:.2f}%')
+    
+    return model
+
+# 主程序
+if __name__ == "__main__":
+    # 初始化模型
+    model = PVFaultDetectionModel()
+    
+    # 生成模拟数据
+    train_loader, test_loader = generate_sample_data()
+    
+    # 训练模型
+    print("开始训练模型...")
+    trained_model = train_model(model, train_loader, test_loader, num_epochs=5)
+    
+    # 保存模型权重
+    model_path = 'pv_fault_model.pth'
+    torch.save(trained_model.state_dict(), model_path)
+    print(f"训练好的模型已保存至: {model_path}")
